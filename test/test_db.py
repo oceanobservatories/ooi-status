@@ -3,13 +3,12 @@ import os
 import unittest
 
 import pandas as pd
+from get_logger import get_logger
 from sqlalchemy import create_engine
 
-from get_logger import get_logger
-from model.rsn_status_model import create_database, ExpectedStream, DeployedStream
-from rsn_status_monitor import CassStatusMonitor, UframeStatusMonitor
-from stop_watch import stopwatch
-
+from ooi_status.model import create_database, ExpectedStream, DeployedStream
+from ooi_status.status_monitor import CassStatusMonitor, UframeStatusMonitor
+from ooi_status.stop_watch import stopwatch
 
 log = get_logger(__name__, level=logging.DEBUG)
 

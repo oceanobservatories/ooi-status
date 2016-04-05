@@ -4,19 +4,15 @@ RSN health and status monitor for data particles received by OOI CI.
 @author Dan Mergens
 """
 import datetime
-import requests
-import click
 import logging
-import pandas as pd
 
-from apscheduler.schedulers.blocking import BlockingScheduler
-from sqlalchemy import create_engine
+import pandas as pd
+import requests
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql.elements import and_
-from cassandra.cluster import Cluster
 
 from get_logger import get_logger
-from model.rsn_status_model import Counts, create_database, DeployedStream, ReferenceDesignator, ExpectedStream
+from ooi_status.model.status_model import Counts, DeployedStream, ReferenceDesignator, ExpectedStream
 from stop_watch import stopwatch
 
 log = get_logger(__name__, logging.DEBUG)
@@ -120,8 +116,8 @@ class BaseStatusMonitor(object):
                 if es is None:
                     es = ExpectedStream(name=stream, method=method)
                 es.rate = rate
-                es.warn_interval = timeout/2
-                es.fail_interval = timeout
+                es.warn_interval = timeout * 2
+                es.fail_interval = timeout * 10
                 self.session.add(es)
 
 
@@ -209,32 +205,3 @@ class UframeStatusMonitor(BaseStatusMonitor):
     def parse_reference_designator(ref_des):
         subsite, node, sensor = ref_des.split('-', 2)
         return subsite, node, sensor
-
-
-@click.command()
-@click.option('--posthost', default='localhost', help='hostname for Postgres database')
-@click.option('--casshost', default='localhost', help='hostname for the cassandra database')
-@click.option('--expected', type=click.Path(exists=True, dir_okay=False),
-              help='CSV file with expected rates and timeouts')
-def main(casshost, posthost, expected):
-    engine = create_engine('postgresql+psycopg2://monitor:monitor@{posthost}'.format(posthost=posthost))
-    create_database(engine)
-
-    if casshost is not None:
-        cluster = Cluster([casshost])
-        cassandra = cluster.connect('ooi')
-    else:
-        cassandra = None
-
-    monitor = CassStatusMonitor(engine, cassandra)
-    monitor.read_expected_csv(expected)
-    scheduler = BlockingScheduler()
-    log.info('adding job')
-    scheduler.add_job(monitor.gather_all, 'cron', second=0)
-    # scheduler.add_job(monitor.gather_all, 'interval', seconds=60)
-    log.info('starting job')
-    scheduler.start()
-
-
-if __name__ == '__main__':
-    main()
