@@ -1,9 +1,7 @@
-from collections import namedtuple
-
 from datetime import datetime
+
 from flask import jsonify, request
 from sqlalchemy import func
-from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.elements import and_
 
 from ooi_status.api import app, db
@@ -62,23 +60,15 @@ def last_seen():
     if filter_stream:
         filter_constraints.append(ExpectedStream.name.like('%%%s%%' % filter_stream))
 
-    subquery = db.session.query(Counts.stream_id, func.max(Counts.timestamp).label('last_seen')).group_by(Counts.stream_id).subquery()
+    subquery = db.session.query(Counts.stream_id,
+                                func.max(Counts.timestamp).label('last_seen')).group_by(Counts.stream_id).subquery()
 
-    query = db.session.query(DeployedStream, subquery.c.last_seen).join(subquery).join(ExpectedStream).join(ReferenceDesignator)
+    query = db.session.query(DeployedStream,
+                             subquery.c.last_seen).join(subquery).join(ExpectedStream).join(ReferenceDesignator)
+
     if filter_constraints:
         query = query.filter(and_(*filter_constraints))
 
-    # rows = db.session.execute('''
-    #     select r.name as refdes, e.name as stream, method, last_seen, warn_interval, fail_interval, rate
-    #     from (
-    #         select stream_id, max(timestamp) as last_seen from counts group by stream_id
-    #         ) as foo
-    #     join deployed_stream d on (stream_id = d.id)
-    #     join expected_stream e on (expected_stream_id = e.id)
-    #     join reference_designator r on (ref_des_id = r.id)
-    #     %s
-    #     order by last_seen desc''' % where_clause)
-    # fields = ['refdes', 'stream', 'method', 'last_seen', 'warn_interval', 'fail_interval', 'rate']
     out = []
     for deployed_stream, last_seen in query:
 
@@ -110,24 +100,3 @@ def last_seen():
 
     return jsonify({'last_seen': out, 'query': str(query).split('\n')})
 
-
-'''
-SELECT reference_designator.name AS reference_designator_name,
-       deployed_stream.id AS deployed_stream_id,
-       deployed_stream.ref_des_id AS deployed_stream_ref_des_id,
-       deployed_stream.expected_stream_id AS deployed_stream_expected_stream_id,
-       expected_stream.id AS expected_stream_id,
-       expected_stream.name AS expected_stream_name,
-       expected_stream.method AS expected_stream_method,
-       expected_stream.rate AS expected_stream_rate,
-       expected_stream.warn_interval AS expected_stream_warn_interval,
-       expected_stream.fail_interval AS expected_stream_fail_interval,
-       anon_1.stream_id AS anon_1_stream_id,
-       anon_1.last_seen AS anon_1_last_seen
-FROM (SELECT counts.stream_id AS stream_id, max(counts.timestamp) AS last_seen
-      FROM counts GROUP BY counts.stream_id) AS anon_1,
-      reference_designator
-      JOIN deployed_stream ON reference_designator.id = deployed_stream.ref_des_id
-      JOIN reference_designator ON reference_designator.id = deployed_stream.ref_des_id
-      JOIN expected_stream ON expected_stream.id = deployed_stream.expected_stream_id'
-'''
