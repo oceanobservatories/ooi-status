@@ -3,8 +3,6 @@ Track the CI particles being ingested into cassandra and store information into 
 
 @author Dan Mergens
 """
-from collections import OrderedDict
-
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
 from sqlalchemy.ext.declarative import declarative_base
@@ -50,9 +48,12 @@ class DeployedStream(Base):
     ref_des = relationship(ReferenceDesignator, backref='deployed_streams', lazy='joined')
     expected_stream_id = Column(Integer, ForeignKey('expected_stream.id'), nullable=False)
     expected_stream = relationship(ExpectedStream, backref='deployed_streams', lazy='joined')
+    rate = Column(Float, default=-1)
+    warn_interval = Column(Integer, default=-1)
+    fail_interval = Column(Integer, default=-1)
 
     def asdict(self):
-        fields = ['id', 'ref_des', 'expected_stream']
+        fields = ['ref_des', 'expected_stream', 'rate', 'warn_interval', 'fail_interval']
         return {field: getattr(self, field) for field in fields}
 
     def last_seen(self, session):

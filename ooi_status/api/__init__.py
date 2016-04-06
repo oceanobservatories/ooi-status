@@ -24,7 +24,7 @@ else:
 
 app = Flask(__name__)
 app.json_encoder = StatusJsonEncoder
-app.config['SQLALCHEMY_ECHO'] = False
+app.config['SQLALCHEMY_ECHO'] = True
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql+psycopg2://monitor:monitor@localhost'
 db = SQLAlchemy(app)
