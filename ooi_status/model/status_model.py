@@ -52,7 +52,7 @@ class DeployedStream(Base):
     expected_stream = relationship(ExpectedStream, backref='deployed_streams', lazy='joined')
 
     def asdict(self):
-        fields = ['ref_des', 'expected_stream']
+        fields = ['id', 'ref_des', 'expected_stream']
         return {field: getattr(self, field) for field in fields}
 
     def last_seen(self, session):
