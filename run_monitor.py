@@ -5,6 +5,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from cassandra.cluster import Cluster
 from sqlalchemy import create_engine
 
+from ooi_status.amqp_client import AmqpStatsClient
 from ooi_status.get_logger import get_logger
 from ooi_status.model.status_model import create_database
 from ooi_status.status_monitor import CassStatusMonitor, UframeStatusMonitor
@@ -32,6 +33,12 @@ def main(casshost, posthost, uframehost):
         monitor = CassStatusMonitor(engine, cassandra)
     else:
         monitor = UframeStatusMonitor(engine, uframehost)
+
+    amqp_url = 'amqp://localhost'
+    amqp_queue = 'port_agent_stats'
+    # start the asynchronous AMQP listener
+    amqp_client = AmqpStatsClient(amqp_url, amqp_queue, engine)
+    amqp_client.start_thread()
 
     scheduler = BlockingScheduler()
     log.info('adding jobs')
