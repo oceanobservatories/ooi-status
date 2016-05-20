@@ -4,6 +4,7 @@ import unittest
 
 import datetime
 import pandas as pd
+from mock import mock
 from sqlalchemy.sql.elements import and_
 
 from ooi_status.get_logger import get_logger
@@ -21,16 +22,17 @@ streamed = pd.read_csv(os.path.join(test_dir, 'data', 'ooi-status.csv'))
 streamed['count'] = streamed['count'].astype('int')
 
 
-def mock_query_cassandra(offset, offset_secs=60, num_records=100):
+def mock_query_cassandra(now, offset, rounds, offset_secs=60, num_records=100):
     fields = ['subsite', 'node', 'sensor', 'method', 'stream', 'count', 'last']
     iter = streamed[streamed.method == 'streamed'][fields].itertuples(index=False)
+    collected = now - datetime.timedelta(seconds=(rounds-offset-1)*offset_secs)
+    last_seen = collected - datetime.timedelta(seconds=1)
     for index, (subsite, node, sensor, method, stream, count, last) in enumerate(iter):
         if index == num_records:
             break
         reference_designator = '-'.join((subsite, node, sensor))
-        particle_count = count + offset * offset_secs
-        last_seen = datetime.datetime.utcfromtimestamp(last - CassStatusMonitor.ntp_epoch_offset)
-        yield reference_designator, method, stream, particle_count, last_seen
+        particle_count = count + offset_secs * offset
+        yield reference_designator, stream, method, particle_count, last_seen, collected
 
 
 class StatusMonitorTest(unittest.TestCase):
@@ -43,13 +45,17 @@ class StatusMonitorTest(unittest.TestCase):
 class CassStatusMonitorTest(StatusMonitorTest):
     @classmethod
     def setUpClass(cls):
-        StatusMonitorTest.setUpClass()
+        cls.engine = create_engine('postgresql+psycopg2://monitor@localhost/monitor_test')
+        create_database(cls.engine, drop=True)
         cls.monitor = CassStatusMonitor(cls.engine, None)
         cls.monitor.read_expected_csv(os.path.join(test_dir, 'data', 'expected-rates.csv'))
 
-        with stopwatch('6 rounds'):
-            for i in xrange(6):
-                cls.monitor._create_counts(mock_query_cassandra(i))
+        rounds = 6
+        with stopwatch('%d rounds' % rounds):
+            now = datetime.datetime.utcnow()
+            for i in xrange(rounds):
+                for args in mock_query_cassandra(now, i, rounds):
+                    cls.monitor._create_count(*args)
 
     def resolve_deployed_stream(self, name, method):
         return self.monitor.session.query(DeployedStream) \
@@ -65,6 +71,7 @@ class CassStatusMonitorTest(StatusMonitorTest):
         # BOTPT rate is 20 Hz so it should be partial for our test (which updates at 1 Hz)
         ds = self.resolve_deployed_stream('botpt_nano_sample', 'streamed')
         self.assertIsNotNone(ds)
+        print ds
         status = get_status_by_stream_id(self.monitor.session, ds.id, include_rates=False)
         self.assertEqual('DEGRADED', status['deployed']['status'])
 
@@ -72,7 +79,8 @@ class CassStatusMonitorTest(StatusMonitorTest):
         # FLORT rate is 0.89 Hz so it should be operational for our test (which updates at 1 Hz)
         ds = self.resolve_deployed_stream('flort_d_data_record', 'streamed')
         self.assertIsNotNone(ds)
-        self.assertEqual('OPERATIONAL', ds.status)
+        status = get_status_by_stream_id(self.monitor.session, ds.id, include_rates=False)
+        self.assertEqual('OPERATIONAL', status['deployed']['status'])
 
 
 class UframeStatusMonitorTest(StatusMonitorTest):

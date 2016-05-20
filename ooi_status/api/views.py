@@ -103,6 +103,7 @@ def get_streams():
 def get_stream(deployed_id):
     status = get_status_by_stream_id(app.session, deployed_id)
     if status:
+        print status
         return jsonify(status)
 
     abort(httplib.NOT_FOUND)

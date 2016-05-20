@@ -90,6 +90,25 @@ def resample(session, stream_id, start_time, end_time, seconds):
             session.add(sc)
         return resampled
 
+def resample_port_count(session, stream_id, start_time, end_time, seconds):
+    # fetch all count data in our window
+    query = session.query(StreamCount).filter(and_(StreamCount.stream_id == stream_id,
+                                                   StreamCount.collected_time >= start_time,
+                                                   StreamCount.collected_time < end_time))
+    counts_df = pd.read_sql_query(query.statement, query.session.bind, index_col='collected_time')
+    # resample to our new interval
+    if len(counts_df) > 0:
+        resampled = counts_df.resample('%dS' % seconds).sum()
+        # drop the old records
+        session.query(StreamCount).filter(StreamCount.id.in_(list(counts_df.id.values))).delete(
+            synchronize_session=False)
+        # insert the new records
+        for collected_time, _, _, particle_count, seconds in resampled.itertuples():
+            sc = StreamCount(stream_id=stream_id, collected_time=collected_time,
+                             particle_count=particle_count, seconds=seconds)
+            session.add(sc)
+        return resampled
+
 
 def get_data_rates(session, stream_id):
     query = session.query(StreamCount).filter(StreamCount.stream_id == stream_id)
@@ -290,9 +309,27 @@ def get_status_for_notification(session):
             status_dict.setdefault(deployed_stream.reference_designator, []).append(d)
             condition.last_status = status
 
-    if status_dict:
+    if check_should_notify(status_dict):
         notify(status_dict)
     return {'status': status_dict}
+
+
+def check_should_notify(status_dict):
+    """
+    Criteria for notification:
+
+    Any entry has a current or previous status of FAILED
+    10 or more streams changed state
+    """
+    if sum((len(v) for v in status_dict.itervalues())) > 9:
+        return True
+
+    for refdes in status_dict:
+        for status in status_dict[refdes]:
+            if status.last_status == 'FAILED' or status.new_status == 'FAILED':
+                return True
+
+    return False
 
 
 def get_color(new_status):
