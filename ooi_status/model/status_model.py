@@ -3,12 +3,23 @@ Track the CI particles being ingested into cassandra and store information into 
 
 @author Dan Mergens
 """
-import toolz
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
 Base = declarative_base()
+
+
+class ReferenceDesignator(Base):
+    __tablename__ = 'reference_designator'
+    __table_args__ = (
+        UniqueConstraint('name'),
+    )
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+
+    def __repr__(self):
+        return self.name
 
 
 class ExpectedStream(Base):
@@ -28,16 +39,17 @@ class ExpectedStream(Base):
         return {field: getattr(self, field) for field in fields}
 
     def __repr__(self):
-        return '{0} {1} {2} Hz {3}/{4}'.format(self.name, self.method, self.expected_rate, self.warn_interval, self.fail_interval)
+        return '{0} {1} {2} Hz {3}/{4}'.format(self.name, self.method, self.expected_rate,
+                                               self.warn_interval, self.fail_interval)
 
 
 class DeployedStream(Base):
     __tablename__ = 'deployed_stream'
     __table_args__ = (
-        UniqueConstraint('reference_designator', 'expected_stream_id'),
+        UniqueConstraint('reference_designator_id', 'expected_stream_id'),
     )
     id = Column(Integer, primary_key=True)
-    reference_designator = Column(String, nullable=False)
+    reference_designator_id = Column(Integer, ForeignKey('reference_designator.id'), nullable=False)
     expected_stream_id = Column(Integer, ForeignKey('expected_stream.id'), nullable=False)
     particle_count = Column(Integer, nullable=False)
     last_seen = Column(DateTime, nullable=False)
@@ -45,15 +57,23 @@ class DeployedStream(Base):
     expected_rate = Column(Float)
     warn_interval = Column(Integer)
     fail_interval = Column(Integer)
+    reference_designator = relationship(ReferenceDesignator, backref='deployed_streams', lazy='joined')
     expected_stream = relationship(ExpectedStream, backref='deployed_streams', lazy='joined')
     stream_condition = relationship('StreamCondition', uselist=False, back_populates="deployed_stream")
 
     def asdict(self):
-        fields = ['id', 'reference_designator', 'expected_stream', 'expected_rate', 'warn_interval', 'fail_interval']
-        return {field: getattr(self, field) for field in fields}
+        return {
+            'id': self.id,
+            'reference_designator': self.reference_designator.name,
+            'expected_stream': self.expected_stream,
+            'expected_rate': self.expected_rate,
+            'warn_interval': self.warn_interval,
+            'fail_interval': self.fail_interval,
+        }
 
     def __repr__(self):
-        return '{0} {1} {2} {3}'.format(self.reference_designator, self.expected_stream, self.collected, self.particle_count)
+        return '{0} {1} {2} {3}'.format(self.reference_designator, self.expected_stream,
+                                        self.collected, self.particle_count)
 
     def get_expected_rate(self):
         return self.expected_stream.expected_rate if self.expected_rate is None else self.expected_rate
@@ -106,7 +126,20 @@ class StreamCount(Base):
     stream = relationship(DeployedStream, backref='stream_counts')
 
     def __repr__(self):
-        return 'StreamCount(id=%d, count=%d, seconds=%f, rate=%f)' % (self.id, self.particle_count, self.seconds, self.particle_count / self.seconds)
+        return 'StreamCount(id=%d, count=%d, seconds=%f, rate=%f)' % (self.id,
+                                                                      self.particle_count,
+                                                                      self.seconds,
+                                                                      self.particle_count / self.seconds)
+
+
+class PortCount(Base):
+    __tablename__ = 'port_count'
+    id = Column(Integer, primary_key=True)
+    reference_designator_id = Column(Integer, ForeignKey('reference_designator.id'), nullable=False)
+    collected_time = Column(DateTime, nullable=False)
+    byte_count = Column(Integer, default=0)
+    seconds = Column(Float, default=0)
+    reference_designator = relationship(ReferenceDesignator, backref='port_counts')
 
 
 def create_database(engine, drop=False):
