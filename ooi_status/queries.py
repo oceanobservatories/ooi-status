@@ -3,12 +3,14 @@ from collections import Counter
 from datetime import timedelta, datetime
 
 import pandas as pd
+import six
 from sqlalchemy import func
 from sqlalchemy.sql.elements import and_
 
-from ooi_status.emailnotifier import EmailNotifier
-from ooi_status.get_logger import get_logger
-from ooi_status.model.status_model import ExpectedStream, DeployedStream, StreamCount, StreamCondition, PortCount
+from .emailnotifier import EmailNotifier
+from .get_logger import get_logger
+from .model.status_model import ExpectedStream, DeployedStream, StreamCount, StreamCondition, PortCount, \
+    ReferenceDesignator
 
 RATE_ACCEPTABLE_DEVIATION = 0.3
 RIGHT = '&rarr;'
@@ -33,10 +35,12 @@ def build_counts_subquery(session, timestamp, stream_id=None, first=False):
 
 
 def get_status_query(session, base_time, filter_refdes=None, filter_method=None,
-                     filter_stream=None, stream_id=None, windows=None):
+                     filter_stream=None, stream_id=None, windows=None, filter_refdes_id=None):
     filter_constraints = []
+    if filter_refdes_id:
+        filter_constraints.append(DeployedStream.reference_designator_id == filter_refdes_id)
     if filter_refdes:
-        filter_constraints.append(DeployedStream.reference_designator.like('%%%s%%' % filter_refdes))
+        filter_constraints.append(ReferenceDesignator.name.like('%%%s%%' % filter_refdes))
     if filter_method:
         filter_constraints.append(ExpectedStream.method.like('%%%s%%' % filter_method))
     if filter_stream:
@@ -67,6 +71,7 @@ def get_status_query(session, base_time, filter_refdes=None, filter_method=None,
     # Apply any filter constraints if supplied
     if filter_constraints:
         query = query.join(ExpectedStream)
+        query = query.join(ReferenceDesignator)
         query = query.filter(and_(*filter_constraints))
 
     return query
@@ -117,6 +122,16 @@ def get_data_rates(session, stream_id):
     counts_df.sort_index(inplace=True)
     counts_df = counts_df.resample('1H').mean()
     counts_df['rate'] = counts_df.particle_count / counts_df.seconds
+    return counts_df
+
+
+def get_port_data_rates(session, refdes_id):
+    query = session.query(PortCount).filter(PortCount.reference_designator_id == refdes_id)
+    counts_df = pd.read_sql_query(query.statement, query.session.bind, index_col='collected_time')
+    if not counts_df.empty:
+        counts_df.sort_index(inplace=True)
+        counts_df = counts_df.resample('1H').mean()
+        counts_df['rate'] = counts_df.byte_count / counts_df.seconds
     return counts_df
 
 
@@ -195,9 +210,64 @@ def get_status(deployed_stream, elapsed_seconds, five_min_rate, one_day_rate):
         return 'OPERATIONAL'
 
 
-def get_status_by_instrument(session, filter_refdes=None, filter_method=None, filter_stream=None, filter_status=None):
+def get_status_by_instrument(session, filter_refdes=None, filter_method=None, filter_stream=None,
+                             filter_status=None, filter_refdes_id=None):
     base_time = get_base_time()
-    query = get_status_query(session, base_time, filter_refdes, filter_method, filter_stream)
+    query = get_status_query(session, base_time, filter_refdes=filter_refdes,
+                             filter_method=filter_method, filter_stream=filter_stream,
+                             filter_refdes_id=filter_refdes_id)
+
+    # group by reference designator
+    out_dict = {}
+    for row in query:
+        row_dict = create_status_dict(row)
+        refdes = row_dict.pop('reference_designator')
+        refdes_id = row_dict.pop('reference_designator_id')
+        out_dict.setdefault((refdes, refdes_id), []).append(row_dict)
+
+    out = []
+    # create a rollup status
+    for refdes, refdes_id in out_dict:
+        streams = out_dict[(refdes, refdes_id)]
+        statuses = [stream.get('status') for stream in streams]
+        if 'DEAD' in statuses:
+            status = 'DEAD'
+        elif 'FAILED' in statuses:
+            status = 'FAILED'
+        elif 'DEGRADED' in statuses:
+            status = 'DEGRADED'
+        elif 'OPERATIONAL' in statuses:
+            status = 'OPERATIONAL'
+        else:
+            status = statuses[0]
+
+        if not filter_status or filter_status == status:
+            out.append({'reference_designator': refdes, 'reference_designator_id': refdes_id,
+                        'streams': streams, 'status': status})
+
+    if filter_refdes_id:
+        if out:
+            d = out[0]
+            counts_df = get_port_data_rates(session, filter_refdes_id)
+            if not counts_df.empty:
+                d['rates'] = list(counts_df.rate)
+                d['hours'] = list(counts_df.index)
+            else:
+                d['rates'] = []
+                d['hours'] = []
+            return d
+        return {}
+
+    counts = Counter()
+    for row in out:
+        counts[row['status']] += 1
+
+    return {'counts': counts, 'instruments': out, 'num_records': len(out)}
+
+
+def get_status_by_refdes(session, refdes_id):
+    base_time = get_base_time()
+    query = get_status_query(session, base_time, filter_refdes_id=refdes_id)
 
     # group by reference designator
     out_dict = {}
@@ -222,8 +292,7 @@ def get_status_by_instrument(session, filter_refdes=None, filter_method=None, fi
         else:
             status = statuses[0]
 
-        if not filter_status or filter_status == status:
-            out.append({'reference_designator': refdes, 'streams': streams, 'status': status})
+        out.append({'reference_designator': refdes, 'streams': streams, 'status': status})
 
     counts = Counter()
     for row in out:
@@ -238,7 +307,8 @@ def get_base_time():
 
 def get_status_by_stream(session, filter_refdes=None, filter_method=None, filter_stream=None, filter_status=None):
     base_time = get_base_time()
-    query = get_status_query(session, base_time, filter_refdes, filter_method, filter_stream)
+    query = get_status_query(session, base_time, filter_refdes=filter_refdes, filter_method=filter_method,
+                             filter_stream=filter_stream)
 
     out = []
     for row in query:
@@ -322,7 +392,7 @@ def check_should_notify(status_dict):
     Any entry has a current or previous status of FAILED
     10 or more streams changed state
     """
-    if sum((len(v) for v in status_dict.itervalues())) > 9:
+    if sum((len(v) for v in six.itervalues(status_dict))) > 9:
         return True
 
     for refdes in status_dict:

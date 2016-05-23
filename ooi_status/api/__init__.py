@@ -5,7 +5,8 @@ from flask.json import JSONEncoder
 from flask.ext.compress import Compress
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
-from ooi_status.model.status_model import Base
+
+from ..model.status_model import Base
 
 
 class StatusJsonEncoder(JSONEncoder):

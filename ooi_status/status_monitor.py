@@ -5,17 +5,17 @@ RSN health and status monitor for data particles received by OOI CI.
 """
 import datetime
 import logging
-
 import pandas as pd
 import requests
+
 from dateutil.parser import parse
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql.elements import and_
 
-from get_logger import get_logger
-from ooi_status.model.status_model import DeployedStream, ExpectedStream, StreamCount, ReferenceDesignator
-from ooi_status.queries import resample_stream_count, get_status_for_notification, resample_port_count
-from stop_watch import stopwatch
+from .get_logger import get_logger
+from .model.status_model import DeployedStream, ExpectedStream, StreamCount, ReferenceDesignator
+from .queries import resample_stream_count, get_status_for_notification, resample_port_count
+from .stop_watch import stopwatch
 
 log = get_logger(__name__, logging.INFO)
 

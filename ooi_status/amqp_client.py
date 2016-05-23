@@ -1,7 +1,7 @@
 import json
-from logging import getLogger
-
 import datetime
+
+from logging import getLogger
 from threading import Thread
 
 from kombu.mixins import ConsumerMixin
@@ -9,7 +9,7 @@ from kombu import Connection, Queue
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from ooi_status.model.status_model import PortCount, ReferenceDesignator
+from .model.status_model import PortCount, ReferenceDesignator
 
 log = getLogger(__name__)
 

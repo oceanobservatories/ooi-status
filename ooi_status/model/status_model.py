@@ -65,6 +65,7 @@ class DeployedStream(Base):
         return {
             'id': self.id,
             'reference_designator': self.reference_designator.name,
+            'reference_designator_id': self.reference_designator.id,
             'expected_stream': self.expected_stream,
             'expected_rate': self.expected_rate,
             'warn_interval': self.warn_interval,

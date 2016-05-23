@@ -2,7 +2,7 @@ import datetime
 import functools
 import logging
 
-from get_logger import get_logger
+from .get_logger import get_logger
 
 log = get_logger(__name__, level=logging.DEBUG)
 
@@ -34,7 +34,7 @@ class stopwatch(object):
         def decorated(*args, **kwargs):
             self.start_time = datetime.datetime.now()
             if self.label is None:
-                self.label = 'function: %s' % f.func_name
+                self.label = 'function: %s' % f.__name__
             with self:
                 return f(*args, **kwargs)
         return decorated
