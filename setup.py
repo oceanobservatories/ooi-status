@@ -21,5 +21,9 @@ setup(
                       'gunicorn',
                       'toolz>0.7',
                       'click>=6.6',
-                      'SQLAlchemy>=1.0.12',]
+                      'SQLAlchemy>=1.0.12',
+                      'kombu',
+                      'requests',
+                      'matplotlib',
+                      'seaborn']
 )

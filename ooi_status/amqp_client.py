@@ -1,12 +1,13 @@
 import json
 import datetime
+import socket
 
 from logging import getLogger
 from threading import Thread
+from time import sleep
 
 from kombu.mixins import ConsumerMixin
 from kombu import Connection, Queue
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from .model.status_model import PortCount, ReferenceDesignator
@@ -19,9 +20,10 @@ class AmqpStatsClient(ConsumerMixin):
         self.engine = engine
         self.session_factory = sessionmaker(bind=engine, autocommit=True)
         self.session = self.session_factory()
-        self.connection = Connection(url)
-        self.queue = Queue(name=queue, channel=self.connection)
         self._refdes_cache = {}
+        self._queue_name = queue
+        self.connection = Connection(url)
+        self.queue = Queue(name=self._queue_name, channel=self.connection)
 
     def _get_or_create_refdes(self, reference_designator):
         if reference_designator not in self._refdes_cache:
@@ -67,10 +69,3 @@ class AmqpStatsClient(ConsumerMixin):
         t.setDaemon(True)
         t.start()
         return t
-
-
-if __name__ == '__main__':
-    engine = create_engine('postgresql+psycopg2://monitor:monitor@localhost')
-    a = AmqpStatsClient('amqp://', 'port_agent_stats', engine)
-    t = a.start_thread()
-    t.join()

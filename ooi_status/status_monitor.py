@@ -3,21 +3,33 @@ RSN health and status monitor for data particles received by OOI CI.
 
 @author Dan Mergens
 """
-import datetime
+import os
+import click
 import logging
-import pandas as pd
 import requests
+import datetime
+import pandas as pd
 
+from apscheduler.schedulers.blocking import BlockingScheduler
+from cassandra.cluster import Cluster
 from dateutil.parser import parse
+from flask import Config
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql.elements import and_
 
+from ooi_status.amqp_client import AmqpStatsClient
+from ooi_status.emailnotifier import EmailNotifier
 from .get_logger import get_logger
-from .model.status_model import DeployedStream, ExpectedStream, StreamCount, ReferenceDesignator
-from .queries import resample_stream_count, get_status_for_notification, resample_port_count
+from .model.status_model import (DeployedStream, ExpectedStream, StreamCount,
+                                 ReferenceDesignator, NotifyAddress, create_database)
+from .queries import (resample_stream_count, get_status_for_notification, resample_port_count,
+                      create_daily_digest_plots, create_daily_digest_html, get_unique_sites,
+                      get_stream_rates_dataframe, get_port_rates_dataframe, check_should_notify)
 from .stop_watch import stopwatch
 
 log = get_logger(__name__, logging.INFO)
+here = os.path.dirname(__file__)
 
 
 class BaseStatusMonitor(object):
@@ -29,6 +41,7 @@ class BaseStatusMonitor(object):
         self._refdes_cache = {}
         self._expected_cache = {}
         self._deployed_cache = {}
+        self.config = Config(here)
 
     def gather_all(self):
         raise NotImplemented
@@ -109,29 +122,66 @@ class BaseStatusMonitor(object):
             self.session.add(particle_count)
 
     def resample_count_data_hourly(self):
+        window_start = self.config.get('RESAMPLE_WINDOW_START_HOURS')
+        window_end = self.config.get('RESAMPLE_WINDOW_END_HOURS')
         # get a datetime object representing this HOUR
         now = datetime.datetime.utcnow().replace(second=0, minute=0)
-        # get a datetime object representing this HOUR - 24
-        twenty_four_ago = now - datetime.timedelta(hours=24)
-        # get a datetime object representing this HOUR - 48
-        fourty_eight_ago = now - datetime.timedelta(hours=48)
+        window_start_dt = now - datetime.timedelta(hours=window_start)
+        window_end_dt = now - datetime.timedelta(hours=window_end)
         session = self.session_factory()
 
         for deployed_stream in self.session.query(DeployedStream):
             log.info('Resampling %s', deployed_stream)
             # resample all count data from now-48 to now-24 to 1 hour
             with session.begin():
-                resample_stream_count(session, deployed_stream.id, fourty_eight_ago, twenty_four_ago, 3600)
+                counts_df = get_stream_rates_dataframe(session, deployed_stream.id, window_end_dt, window_start_dt)
+                resample_stream_count(session, deployed_stream.id, counts_df, 3600)
 
         for reference_designator in self.session.query(ReferenceDesignator):
             log.info('Resampling %s', reference_designator)
             with session.begin():
-                resample_port_count(session, reference_designator.id, fourty_eight_ago, twenty_four_ago, 3600)
+                counts_df = get_port_rates_dataframe(session, reference_designator.id, window_end_dt, window_start_dt)
+                resample_port_count(session, reference_designator.id, counts_df, 3600)
+
+    @staticmethod
+    def get_notify_list(session, email_type):
+        query = session.query(NotifyAddress).filter(NotifyAddress.email_type == email_type)
+        return [na.email_addr for na in query]
 
     def check_for_notify(self):
         session = self.session_factory()
         with session.begin():
-            get_status_for_notification(session)
+            status_dict = get_status_for_notification(session)
+            if check_should_notify(status_dict):
+
+                notify_subject = self.config.get('NOTIFY_SUBJECT')
+                notify_list = self.get_notify_list(session, 'notify')
+                notifier = self.get_email_notifier()
+                notifier.send_status(notify_list, notify_subject, status_dict)
+
+    def daily_digest(self):
+        session = self.session_factory()
+        subject_format = self.config.get('DIGEST_SUBJECT')
+        root_url = self.config.get('URL_ROOT')
+        www_root = self.config.get('WWW_ROOT')
+        date = datetime.date.today()
+        notifier = self.get_email_notifier()
+        notify_list = self.get_notify_list(session, 'digest')
+
+        with session.begin():
+            create_daily_digest_plots(session, www_root=www_root)
+            for site in get_unique_sites(session):
+                html = create_daily_digest_html(session, site=site, root_url=root_url)
+                notify_subject = subject_format % (site, date)
+                notifier.send_html(notify_list, notify_subject, html)
+
+    def get_email_notifier(self):
+        smtp_user = self.config.get('SMTP_USER')
+        smtp_passwd = self.config.get('SMTP_PASS')
+        smtp_host = self.config.get('SMTP_HOST')
+        from_addr = self.config.get('EMAIL_FROM')
+        root_url = self.config.get('URL_ROOT')
+        return EmailNotifier(smtp_host, from_addr, root_url, smtp_user, smtp_passwd)
 
 
 class CassStatusMonitor(BaseStatusMonitor):
@@ -165,12 +215,7 @@ class UframeStatusMonitor(BaseStatusMonitor):
         self._create_counts(self._query_api())
 
     def _query_api(self):
-        """
-        Get most recent metadata for the stream from cassandra
-        :param deployed_stream: deployed stream object from postgres
-        :return: (count, timestamp)
-        """
-        # get the latest metadata from cassandra
+        # get the latest metadata from uframe
         url = self.EDEX_BASE_URL % (self.uframe_host, self.uframe_port)
         response = requests.get(url)
         if response.status_code is not 200:
@@ -186,3 +231,56 @@ class UframeStatusMonitor(BaseStatusMonitor):
                 last_seen = parse(stream_dict.get('endTime')).replace(tzinfo=None)
                 if all((stream, method, particle_count, last_seen)):
                     yield reference_designator, method, stream, particle_count, last_seen
+
+
+@click.command()
+@click.option('--posthost', default='localhost', help='hostname for Postgres database')
+@click.option('--casshost', help='hostname for the cassandra database')
+@click.option('--uframehost', help='hostname for the uframe API')
+def main(casshost, posthost, uframehost):
+    engine = create_engine('postgresql+psycopg2://monitor:monitor@{posthost}'.format(posthost=posthost))
+    create_database(engine)
+
+    if not any((casshost, uframehost)):
+        raise Exception('You must supply either a cassandra node or a uframe host')
+
+    if all((casshost, uframehost)):
+        raise Exception('You must supply only ONE cassandra node or uframe host')
+
+    if casshost is not None:
+        cluster = Cluster([casshost])
+        cassandra = cluster.connect('ooi')
+        monitor = CassStatusMonitor(engine, cassandra)
+    else:
+        monitor = UframeStatusMonitor(engine, uframehost)
+
+    monitor.config.from_object('ooi_status.default_settings')
+    if 'OOISTATUS_SETTINGS' in os.environ:
+        monitor.config.from_envvar('OOISTATUS_SETTINGS')
+
+    for key in monitor.config:
+        log.info('OOI_STATUS CONFIG: %r: %r', key, monitor.config[key])
+
+    amqp_url = monitor.config.get('AMQP_URL')
+    amqp_queue = monitor.config.get('AMQP_QUEUE')
+    if amqp_url and amqp_queue:
+        # start the asynchronous AMQP listener
+        amqp_client = AmqpStatsClient(amqp_url, amqp_queue, engine)
+        amqp_client.start_thread()
+
+    scheduler = BlockingScheduler()
+    log.info('adding jobs')
+    # gather data every minute
+    scheduler.add_job(monitor.gather_all, 'cron', second=0)
+    # resample data every hour
+    scheduler.add_job(monitor.resample_count_data_hourly, 'cron', minute=0)
+    # notify on change every 5 minutes
+    scheduler.add_job(monitor.check_for_notify, 'cron', minute='*/5')
+    # daily digest
+    scheduler.add_job(monitor.daily_digest, 'cron', minute=55)
+    log.info('starting jobs')
+    scheduler.start()
+
+
+if __name__ == '__main__':
+    main()
