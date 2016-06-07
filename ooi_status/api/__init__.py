@@ -1,8 +1,6 @@
 import os
 from flask import Flask
 from flask.json import JSONEncoder
-# from flask_sqlalchemy import SQLAlchemy
-from flask.ext.compress import Compress
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 
@@ -28,9 +26,19 @@ else:
 
 
 app = Flask(__name__)
-Compress(app)
+
+app.config.from_object('ooi_status.default_settings')
+if 'OOISTATUS_SETTINGS' in os.environ:
+    app.config.from_envvar('OOISTATUS_SETTINGS')
 app.json_encoder = StatusJsonEncoder
-app.engine = create_engine('postgresql+psycopg2://monitor:monitor@localhost')
+
+user = app.config['USER']
+password = app.config['PASSWORD']
+posthost = app.config['POSTHOST']
+
+app.engine = create_engine('postgresql+psycopg2://{user}:{password}@{posthost}'.format(user=user,
+                                                                                       password=password,
+                                                                                       posthost=posthost))
 app.sessionmaker = sessionmaker(bind=app.engine)
 app.session = scoped_session(app.sessionmaker)
 Base.query = app.session.query_property()

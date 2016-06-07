@@ -1,12 +1,14 @@
-import datetime
-from flask import jsonify, request
-from werkzeug.exceptions import abort
 import six.moves.http_client as http_client
+from flask import jsonify, request, send_file
+from sqlalchemy import and_
+from werkzeug.exceptions import abort
 
 from ..api import app
-from ..model.status_model import ExpectedStream, DeployedStream
+from ..model.status_model import ExpectedStream, DeployedStream, NotifyAddress
 from ..queries import (get_status_by_instrument, get_status_by_stream,
-                       get_status_by_stream_id, resample_stream_count)
+                       get_status_by_stream_id, plot_stream_rates_buf,
+                       plot_port_rates_buf, create_daily_digest_html,
+                       create_weekly_digest_html)
 
 
 @app.teardown_appcontext
@@ -108,6 +110,12 @@ def get_stream(deployed_id):
     abort(http_client.NOT_FOUND)
 
 
+@app.route('/stream/<int:deployed_id>/plot')
+def get_plot(deployed_id):
+    title, buf = plot_stream_rates_buf(app.session, deployed_id)
+    return send_file(buf, attachment_filename='%s.png' % title, mimetype='image/png')
+
+
 @app.route('/instrument')
 def get_instruments():
     filter_status = request.args.get('status')
@@ -122,6 +130,12 @@ def get_instruments():
 @app.route('/instrument/<int:refdes_id>')
 def get_instrument(refdes_id):
     return jsonify(get_status_by_instrument(app.session, filter_refdes_id=refdes_id))
+
+
+@app.route('/instrument/<int:refdes_id>/plot')
+def plot_instrument_rate(refdes_id):
+    title, buf = plot_port_rates_buf(app.session, refdes_id)
+    return send_file(buf, attachment_filename='%s.png' % title, mimetype='image/png')
 
 
 @app.route('/stream/<int:deployed_id>/disable')
@@ -164,18 +178,47 @@ def enable_by_refdes(refdes):
     return jsonify(get_status_by_instrument(app.session, filter_refdes=refdes))
 
 
-@app.route('/resample')
-def run_resample():
-    # get a datetime object representing this HOUR
-    now = datetime.datetime.utcnow().replace(second=0, minute=0)
-    # get a datetime object representing this HOUR - 24
-    twenty_four_ago = now - datetime.timedelta(hours=24)
-    # get a datetime object representing this HOUR - 48
-    fourty_eight_ago = now - datetime.timedelta(hours=48)
+@app.route('/email', methods=['GET'])
+def get_emails():
+    emails = app.session.query(NotifyAddress)
+    return jsonify({'addresses': [e.asdict() for e in emails]})
 
-    for deployed_stream in DeployedStream.query:
-        app.logger.error('Resampling %s', deployed_stream)
-        # resample all count data from now-48 to now-24 to 1 hour
-        resample_stream_count(app.session, deployed_stream.id, fourty_eight_ago, twenty_four_ago, 3600)
+
+@app.route('/email/<email_addr>/<email_type>', methods=['PUT'])
+def add_email(email_addr, email_type):
+    notify = NotifyAddress(email_addr=email_addr, email_type=email_type)
+    app.session.add(notify)
+    app.session.commit()
+    return ''
+
+
+@app.route('/email/<email_addr>/<email_type>', methods=['DELETE'])
+def del_email(email_addr, email_type):
+    notify = app.session.query(NotifyAddress).filter(and_(NotifyAddress.email_addr == email_addr,
+                                                          NotifyAddress.email_type == email_type)).first()
+    if notify:
+        app.session.delete(notify)
         app.session.commit()
-    return 'DONE'
+        return ''
+
+    abort(http_client.NOT_FOUND)
+
+
+@app.route('/dailydigest')
+def get_daily_digest():
+    return create_daily_digest_html(app.session)
+
+
+@app.route('/dailydigest/<site>')
+def get_daily_digest_site(site):
+    return create_daily_digest_html(app.session, site=site)
+
+
+@app.route('/weeklydigest')
+def get_weekly_digest():
+    return create_daily_digest_html(app.session)
+
+
+@app.route('/weeklydigest/<site>')
+def get_weekly_digest_site(site):
+    return create_weekly_digest_html(app.session, site=site)

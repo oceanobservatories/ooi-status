@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Digest {{ start }} - {{ end }}</title>
+</head>
+<body>
+    <h2> Port Agents </h2>
+{% for reference_designator in image_dict %}
+{% if 'image' in image_dict[reference_designator] %}
+    <a href="{{ root_url }}/instrument/{{ image_dict[reference_designator]['id'] }}/plot">
+    <img src="{{ root_url }}{{ image_dict[reference_designator]['image'] }}" alt="{{ reference_designator }} Bytes/sec" height="200" width="500"/>
+    </a>
+{% endif %}
+{% endfor %}
+    <h2> Streams </h2>
+{% for reference_designator in image_dict %}
+{% for stream in image_dict[reference_designator]['streams'] %}
+    <a href="{{ root_url }}/stream/{{ image_dict[reference_designator]['streams'][stream]['id'] }}/plot">
+    <img src="{{ root_url }}{{ image_dict[reference_designator]['streams'][stream]['image'] }}" alt="{{ stream }} Particles/sec" height="200" width="500"/>
+    </a>
+{% endfor %}
+{% endfor %}
+<small>Sent {{ now }}</small>
+</body>
+</html>

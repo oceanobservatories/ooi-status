@@ -127,10 +127,13 @@ class StreamCount(Base):
     stream = relationship(DeployedStream, backref='stream_counts')
 
     def __repr__(self):
-        return 'StreamCount(id=%d, count=%d, seconds=%f, rate=%f)' % (self.id,
-                                                                      self.particle_count,
-                                                                      self.seconds,
-                                                                      self.particle_count / self.seconds)
+        return 'StreamCount(stream_id=%d, count=%d, seconds=%f, rate=%f, collected=%s)' % (
+            self.stream_id,
+            self.particle_count,
+            self.seconds,
+            self.particle_count / self.seconds,
+            self.collected_time
+        )
 
 
 class PortCount(Base):
@@ -141,6 +144,19 @@ class PortCount(Base):
     byte_count = Column(Integer, default=0)
     seconds = Column(Float, default=0)
     reference_designator = relationship(ReferenceDesignator, backref='port_counts')
+
+
+class NotifyAddress(Base):
+    __tablename__ = 'notify_address'
+    __table_args__ = (
+        UniqueConstraint('email_addr', 'email_type'),
+    )
+    id = Column(Integer, primary_key=True)
+    email_addr = Column(String, nullable=False)
+    email_type = Column(String, nullable=False)
+
+    def asdict(self):
+        return {'addr': self.email_addr, 'type': self.email_type}
 
 
 def create_database(engine, drop=False):
