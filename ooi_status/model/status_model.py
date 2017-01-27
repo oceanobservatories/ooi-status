@@ -4,9 +4,18 @@ Track the CI particles being ingested into cassandra and store information into 
 @author Dan Mergens
 """
 import datetime
+
+import logging
+
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
+
+from ooi_status.get_logger import get_logger
 from .base import MonitorBase
+
+
+log = get_logger(__name__, logging.INFO)
 
 
 class ReferenceDesignator(MonitorBase):
@@ -39,15 +48,16 @@ class ExpectedStream(MonitorBase):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     method = Column(String, nullable=False)
-    expected_rate = Column(Float)
-    warn_interval = Column(Integer)
-    fail_interval = Column(Integer)
+    expected_rate = Column(Float, default=0, nullable=False)
+    warn_interval = Column(Integer, default=0, nullable=False)
+    fail_interval = Column(Integer, default=0, nullable=False)
 
     @staticmethod
     def get_or_create(session, stream, method):
         expected = session.query(ExpectedStream).filter(ExpectedStream.name == stream,
                                                         ExpectedStream.method == method).first()
         if expected is None:
+            log.info('Creating ExpectedStream(name=%s, method=%s', stream, method)
             expected = ExpectedStream(name=stream, method=method)
             session.add(expected)
             session.flush()
@@ -208,6 +218,13 @@ class NotifyAddress(MonitorBase):
 
     def asdict(self):
         return {'addr': self.email_addr, 'type': self.email_type}
+
+
+class PendingUpdate(MonitorBase):
+    __tablename__ = 'pending_update'
+    id = Column(Integer, primary_key=True)
+    message = Column(JSON, nullable=False)
+    error_count = Column(Integer, nullable=False, default=0)
 
 
 def create_database(engine, drop=False):

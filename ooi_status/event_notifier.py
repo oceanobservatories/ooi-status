@@ -28,5 +28,4 @@ class EventNotifier(object):
         log.debug('POST: %s: %r', url, body)
         r = requests.post(url, json=body)
         log.debug('RESPONSE: (%d) %r', r.status_code, r.content)
-        r.raise_for_status()
         return r

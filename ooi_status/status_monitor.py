@@ -9,6 +9,7 @@ import os
 
 import click
 import pandas as pd
+import requests
 from apscheduler.schedulers.blocking import BlockingScheduler
 from flask import Config
 from sqlalchemy import create_engine
@@ -22,7 +23,7 @@ from ooi_status.metadata_queries import get_active_streams
 from ooi_status.status_message import StatusMessage
 from .get_logger import get_logger
 from .model.status_model import (DeployedStream, ExpectedStream, ReferenceDesignator, NotifyAddress, create_database,
-                                 StreamCondition)
+                                 StreamCondition, PendingUpdate)
 from .queries import (resample_stream_count, resample_port_count,
                       create_daily_digest_plots, create_daily_digest_html, get_unique_sites,
                       get_stream_rates_dataframe, get_port_rates_dataframe, get_rollup_status)
@@ -31,20 +32,24 @@ from .stop_watch import stopwatch
 log = get_logger(__name__, logging.INFO)
 here = os.path.dirname(__file__)
 
+MAX_STATUS_POST_FAILURES = 5
 
-class BaseStatusMonitor(object):
-    def __init__(self, engine):
+
+class StatusMonitor(object):
+    def __init__(self, engine, metadata_engine):
         self.engine = engine
         self.session_factory = sessionmaker(bind=engine, autocommit=True)
         self.session = self.session_factory()
+
+        self.metadata_engine = metadata_engine
+        self.metadata_session_factory = sessionmaker(bind=metadata_engine, autocommit=True)
+        self.metadata_session = self.metadata_session_factory()
+
         self._last_count = {}
         self._refdes_cache = {}
         self._expected_cache = {}
         self._deployed_cache = {}
         self.config = Config(here)
-
-    def check_all(self):
-        raise NotImplemented
 
     def _get_or_create_refdes(self, reference_designator):
         if reference_designator not in self._refdes_cache:
@@ -86,7 +91,9 @@ class BaseStatusMonitor(object):
     def _check_status(self, rows):
         now = datetime.datetime.utcnow()
 
+        messages = []
         with self.session.begin():
+
             for stream_metadata, elapsed, uid in rows:
                 deployed = self._get_or_create_stream(stream_metadata.refdes, stream_metadata.stream,
                                                       stream_metadata.method, stream_metadata.count,
@@ -110,22 +117,26 @@ class BaseStatusMonitor(object):
                     condition.last_status_time = now
 
                 if previous_status != status:
-                    yield StatusMessage(stream_metadata.refdes,
-                                        stream_metadata.stream,
-                                        uid,
-                                        elapsed,
-                                        previous_status,
-                                        status,
-                                        interval)
+                    messages.append(StatusMessage(stream_metadata.refdes,
+                                                  stream_metadata.stream,
+                                                  uid,
+                                                  elapsed,
+                                                  previous_status,
+                                                  status,
+                                                  interval))
+        return messages
 
-    def _add_rollup_status(self, status_generator):
+    def _add_rollup_status(self, in_messages):
         status_dict = {}
-        for each in status_generator:
-            rollup_status = status_dict.get(each.refdes)
-            if rollup_status is None:
-                status_dict[each.refdes] = rollup_status = get_rollup_status(self.session, each.refdes)
-            each.instrument_status = rollup_status
-            yield each
+        out_messages = []
+        with self.session.begin():
+            for each in in_messages:
+                rollup_status = status_dict.get(each.refdes)
+                if rollup_status is None:
+                    status_dict[each.refdes] = rollup_status = get_rollup_status(self.session, each.refdes)
+                each.instrument_status = rollup_status
+                out_messages.append(each)
+        return out_messages
 
     def resample_count_data_hourly(self):
         window_start = self.config.get('RESAMPLE_WINDOW_START_HOURS')
@@ -183,33 +194,56 @@ class BaseStatusMonitor(object):
         event_port = self.config.get('NOTIFY_URL_PORT')
         return EventNotifier(self.session, root_url, event_port)
 
-
-class PostgresStatusMonitor(BaseStatusMonitor):
-    def __init__(self, engine, metadata_engine):
-        super(PostgresStatusMonitor, self).__init__(engine)
-        self.metadata_engine = metadata_engine
-        self.metadata_session_factory = sessionmaker(bind=metadata_engine, autocommit=True)
-        self.metadata_session = self.metadata_session_factory()
+    def save_pending(self, messages):
+        with self.session.begin():
+            for message in messages:
+                self.session.add(PendingUpdate(message=message.as_dict()))
 
     def check_all(self):
         active = get_active_streams(self.metadata_session)
         changed = self._check_status(active)
         rolled = self._add_rollup_status(changed)
+        self.save_pending(rolled)
+
+    def notify_all(self):
         notifier = self.get_status_notifier()
 
-        for message in rolled:
-            response = call_with_retry(notifier.post_event, message.uid, message.as_dict())
-            if response is not None:
-                log.info('post returned: (%d) %s', response.status_code, response.json())
-
-
-def call_with_retry(func, *args, **kwargs):
-    max_retries = kwargs.pop('max_retries', 3)
-    for attempt in range(1, max_retries+1):
-        try:
-            return func(*args, **kwargs)
-        except StandardError as e:
-            log.error('failed to execute: %s - retrying (%d of %d)', e, attempt, max_retries)
+        with self.session.begin():
+            for pu in self.session.query(PendingUpdate).order_by(PendingUpdate.id):
+                message = pu.message
+                uid = message.get('assetUid')
+                delete = False
+                if uid and message:
+                    try:
+                        response = notifier.post_event(uid, message)
+                        response.raise_for_status()
+                        status_code = response.status_code
+                        if status_code == 201:
+                            delete = True
+                        elif 400 <= status_code < 500:
+                            # client error - increment the error count
+                            log.error('Received client error from events API: (%d) %r',
+                                      status_code, response.content)
+                            pu.error_count += 1
+                            if pu.error_count > MAX_STATUS_POST_FAILURES:
+                                delete = True
+                        elif status_code >= 500:
+                            # server error - don't increment error count
+                            # log the problem
+                            log.error('Received server error from events API: (%d) %r',
+                                      status_code, response.content)
+                            continue
+                        else:
+                            # unknown response
+                            # log, but don't increment error count
+                            log.error('Received unexpected response from events API: (%d) %r',
+                                      status_code, response.content)
+                    except requests.exceptions.RequestException:
+                        # Don't count this as an error
+                        # we'll keep trying until we can connect to uframe
+                        continue
+                if delete:
+                    self.session.delete(pu)
 
 
 @click.command()
@@ -218,7 +252,7 @@ def main():
     create_database(engine)
 
     metadata_engine = create_engine('postgresql+psycopg2://awips@/metadata')
-    monitor = PostgresStatusMonitor(engine, metadata_engine)
+    monitor = StatusMonitor(engine, metadata_engine)
 
     monitor.config.from_object('ooi_status.default_settings')
     if 'OOISTATUS_SETTINGS' in os.environ:
@@ -239,6 +273,7 @@ def main():
 
     # notify on change every minute
     scheduler.add_job(monitor.check_all, 'cron', second=0)
+    scheduler.add_job(monitor.notify_all, 'cron', second=10)
     log.info('starting jobs')
     scheduler.start()
 

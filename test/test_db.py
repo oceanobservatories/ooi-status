@@ -15,7 +15,7 @@ matplotlib.use('Agg')
 from ooi_status.get_logger import get_logger
 from ooi_status import model
 from ooi_status.queries import get_status_by_stream_id, resample_stream_count, get_stream_rates_dataframe
-from ooi_status.status_monitor import BaseStatusMonitor
+from ooi_status.status_monitor import StatusMonitor
 
 log = get_logger(__name__, level=logging.INFO)
 
@@ -36,7 +36,7 @@ class StatusMonitorTest(unittest.TestCase):
 
         model.create_database(cls.engine, drop=True)
 
-        cls.monitor = BaseStatusMonitor(cls.engine)
+        cls.monitor = StatusMonitor(cls.engine)
         cls.monitor.read_expected_csv(os.path.join(test_dir, 'data', 'expected-rates.csv'))
 
     def resolve_deployed_stream(self, name, method):
