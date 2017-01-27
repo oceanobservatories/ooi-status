@@ -20,7 +20,7 @@ from ooi_status.amqp_client import AmqpStatsClient
 from ooi_status.emailnotifier import EmailNotifier
 from ooi_status.event_notifier import EventNotifier
 from ooi_status.metadata_queries import get_active_streams
-from ooi_status.status_message import StatusMessage
+from ooi_status.status_message import StatusMessage, StatusEnum
 from .get_logger import get_logger
 from .model.status_model import (DeployedStream, ExpectedStream, ReferenceDesignator, NotifyAddress, create_database,
                                  StreamCondition, PendingUpdate)
@@ -101,13 +101,11 @@ class StatusMonitor(object):
 
                 condition = deployed.stream_condition
                 status, interval = deployed.get_status(elapsed)
-
-                if status is None:
-                    continue
+                log.debug('REFDES:%s STREAM:%s STATUS:%s', stream_metadata.refdes, stream_metadata.stream, status)
 
                 if condition is None:
                     now = datetime.datetime.utcnow()
-                    previous_status = 'not tracked'
+                    previous_status = StatusEnum.NOT_TRACKED
                     condition = StreamCondition(deployed_stream=deployed, last_status=status,
                                                 last_status_time=now)
                     self.session.add(condition)

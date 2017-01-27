@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 
 from ooi_status.get_logger import get_logger
+from ooi_status.status_message import StatusEnum
 from .base import MonitorBase
 
 
@@ -119,12 +120,12 @@ class DeployedStream(MonitorBase):
     def get_status(self, elapsed):
         elapsed_seconds = elapsed.total_seconds()
         if self.untracked:
-            return None, None
+            return StatusEnum.NOT_TRACKED, None
         if elapsed_seconds > self.fail_interval:
-            return 'failed', datetime.timedelta(seconds=self.fail_interval)
+            return StatusEnum.FAILED, datetime.timedelta(seconds=self.fail_interval)
         if elapsed_seconds > self.warn_interval:
-            return 'degraded', datetime.timedelta(seconds=self.warn_interval),
-        return 'operational', datetime.timedelta(seconds=self.warn_interval)
+            return StatusEnum.DEGRADED, datetime.timedelta(seconds=self.warn_interval),
+        return StatusEnum.OPERATIONAL, datetime.timedelta(seconds=self.warn_interval)
 
     @property
     def expected_rate(self):

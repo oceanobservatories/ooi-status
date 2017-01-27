@@ -12,6 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.sql.elements import and_
 
 from ooi_status.metadata_queries import get_all_streams
+from ooi_status.status_message import StatusEnum
 from .get_logger import get_logger
 from .model.status_model import (ExpectedStream, DeployedStream, StreamCount,
                                  StreamCondition, PortCount, ReferenceDesignator)
@@ -614,10 +615,10 @@ def get_rollup_status(session, refdes):
     query = query.filter(ReferenceDesignator.name == refdes)
 
     statuses = set((status[0] for status in query))
-    if 'failed' in statuses:
-        return 'failed'
-    elif 'degraded' in statuses:
-        return 'degraded'
-    elif 'operational' in statuses:
-        return 'operational'
-    return 'not tracked'
+    if StatusEnum.FAILED in statuses:
+        return StatusEnum.FAILED
+    elif StatusEnum.DEGRADED in statuses:
+        return StatusEnum.DEGRADED
+    elif StatusEnum.OPERATIONAL in statuses:
+        return StatusEnum.OPERATIONAL
+    return StatusEnum.NOT_TRACKED
