@@ -1,14 +1,6 @@
 import time
 
-
-class StatusEnum:
-    """
-    See com.raytheon.uf.common.ooi.dataplugin.xasset.common.StatusLevel
-    """
-    OPERATIONAL = 'operational'
-    DEGRADED = 'degraded'
-    FAILED = 'failed'
-    NOT_TRACKED = 'notTracked'
+from ooi_data.postgres.model import StatusEnum
 
 
 class StatusMessage(object):

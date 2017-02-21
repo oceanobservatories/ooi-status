@@ -1,16 +1,14 @@
 import json
 import datetime
-import socket
 
 from logging import getLogger
 from threading import Thread
-from time import sleep
 
 from kombu.mixins import ConsumerMixin
 from kombu import Connection, Queue
 from sqlalchemy.orm import sessionmaker
 
-from .model.status_model import PortCount, ReferenceDesignator
+from ooi_data.postgres.model import PortCount, ReferenceDesignator
 
 log = getLogger(__name__)
 

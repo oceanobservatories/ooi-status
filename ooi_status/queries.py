@@ -3,11 +3,11 @@ from collections import Counter
 from datetime import timedelta, datetime
 
 import pandas as pd
+from ooi_data.postgres.model import ExpectedStream, DeployedStream, PortCount, ReferenceDesignator
 from sqlalchemy.sql.elements import and_
 
-from ooi_status.status_message import StatusEnum
 from .get_logger import get_logger
-from .model.status_model import (ExpectedStream, DeployedStream, PortCount, ReferenceDesignator)
+from .status_message import StatusEnum
 
 log = get_logger(__name__, logging.INFO)
 
