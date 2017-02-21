@@ -1,11 +1,11 @@
 import six.moves.http_client as http_client
 from dateutil.parser import parse
 from flask import jsonify, request
+from ooi_data.postgres.model import ExpectedStream, DeployedStream
 from werkzeug.exceptions import abort
 
-from ooi_status.metadata_queries import find_instrument_availability
 from ..api import app
-from ..model.status_model import ExpectedStream, DeployedStream
+from ..metadata_queries import find_instrument_availability
 from ..queries import (get_status_by_instrument, get_status_by_stream,
                        get_status_by_stream_id, get_status_by_refdes_id)
 
@@ -57,9 +57,21 @@ def expected_by_id(expected_id):
 
 @app.route('/expected/<int:expected_id>', methods=['PATCH'])
 def update_expected_by_id(expected_id):
+    def patch(expected, patch):
+        # if an ID is passed, verify it matches the query id
+        if 'id' in patch:
+            if expected.id != patch['id']:
+                abort(http_client.BAD_REQUEST)
+        if 'expected_rate' in patch:
+            expected.expected_rate = patch['expected_rate']
+        if 'warn_interval' in patch:
+            expected.warn_interval = patch['warn_interval']
+        if 'fail_interval' in patch:
+            expected.fail_interval = patch['fail_interval']
+
     expected_stream = app.session.query(ExpectedStream).get(expected_id)
     if expected_stream:
-        expected_stream.patch(request.json)
+        patch(expected_stream, request.json)
         app.session.commit()
         return jsonify(expected_stream.as_dict())
 
@@ -77,9 +89,20 @@ def deployed_by_id(deployed_id):
 
 @app.route('/deployed/<int:deployed_id>', methods=['PATCH'])
 def update_deployed_by_id(deployed_id):
+    def patch(deployed, patch):
+        if 'id' in patch:
+            if deployed.id != patch['id']:
+                abort(http_client.BAD_REQUEST)
+        if 'expected_rate' in patch:
+            deployed._expected_rate = patch['expected_rate']
+        if 'warn_interval' in patch:
+            deployed._warn_interval = patch['warn_interval']
+        if 'fail_interval' in patch:
+            deployed._fail_interval = patch['fail_interval']
+
     deployed_stream = app.session.query(DeployedStream).get(deployed_id)
     if deployed_stream:
-        deployed_stream.patch(request.json)
+        patch(deployed_stream, request.json)
         app.session.commit()
         return jsonify(deployed_stream.as_dict())
 

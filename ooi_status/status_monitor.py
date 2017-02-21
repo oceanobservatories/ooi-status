@@ -16,13 +16,13 @@ from flask import Config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.exc import ObjectDeletedError
-from sqlalchemy.sql.elements import and_
+
+from ooi_data.postgres.model import DeployedStream, ExpectedStream, ReferenceDesignator, PendingUpdate, StatusEnum
 
 from ooi_status.event_notifier import EventNotifier
 from ooi_status.metadata_queries import get_active_streams
-from ooi_status.status_message import StatusMessage, StatusEnum
+from ooi_status.status_message import StatusMessage
 from .get_logger import get_logger
-from .model.status_model import (DeployedStream, ExpectedStream, ReferenceDesignator, PendingUpdate)
 from .queries import (resample_port_count, get_port_rates_dataframe, get_rollup_status)
 from .stop_watch import stopwatch
 

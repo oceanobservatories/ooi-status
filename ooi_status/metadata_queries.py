@@ -1,11 +1,10 @@
 import datetime
 
 import pandas as pd
-import numpy as np
+from ooi_data.postgres import model
 from sqlalchemy import func
 from sqlalchemy import or_
 
-import model
 from .get_logger import get_logger
 
 
@@ -38,7 +37,7 @@ def get_data(session, subsite, node, sensor, method, stream, lower_bound, upper_
     :param upper_bound: datetime object representing the upper time bound of this query
     :return: pandas DataFrame containing all partition metadata records matching the above criteria
     """
-    pm = model.PartitionMetadata
+    pm = model.PartitionMetadatum
     filters = [
         pm.subsite == subsite,
         pm.node == node,
@@ -219,18 +218,18 @@ def find_instrument_availability(session, refdes, method=None, stream=None, lowe
             upper_bound = deployment_upper_bound
 
     # Fetch all possible streams
-    query = session.query(model.StreamMetadata)
+    query = session.query(model.StreamMetadatum)
 
     filters = [
-        model.StreamMetadata.subsite == subsite,
-        model.StreamMetadata.node == node,
-        model.StreamMetadata.sensor == sensor
+        model.StreamMetadatum.subsite == subsite,
+        model.StreamMetadatum.node == node,
+        model.StreamMetadatum.sensor == sensor
     ]
 
     if method:
-        filters.append(model.StreamMetadata.method == method)
+        filters.append(model.StreamMetadatum.method == method)
     if stream:
-        filters.append(model.StreamMetadata.stream == stream)
+        filters.append(model.StreamMetadatum.stream == stream)
 
     query = query.filter(*filters)
 
@@ -259,7 +258,7 @@ def get_all_streams(session):
     :param session: sqlalchemy session object
     :return: generator yielding the reference designator, delivery method, stream name, start and stop for all streams
     """
-    for row in session.query(model.StreamMetadata):
+    for row in session.query(model.StreamMetadatum):
         yield row.refdes, row.method, row.stream, row.count, row.stop
 
 
@@ -267,18 +266,18 @@ def get_active_streams(session):
     """
     Return all streams which are within an active deployment
     :param session: sqlalchemy session object
-    :return: (StreamMetadata, TimeDelta(since last particle), String(Asset UID))
+    :return: (StreamMetadatum, TimeDelta(since last particle), String(Asset UID))
     """
     now = datetime.datetime.utcnow()
     for sm, assetid, uid in session.query(
-        model.StreamMetadata,
+        model.StreamMetadatum,
         model.Xdeployment.sassetid,
         model.Xasset.uid
     ).filter(
-        model.StreamMetadata.subsite == model.Xdeployment.subsite,
-        model.StreamMetadata.node == model.Xdeployment.node,
-        model.StreamMetadata.sensor == model.Xdeployment.sensor,
-        model.StreamMetadata.method.in_(['telemetered', 'streamed']),
+        model.StreamMetadatum.subsite == model.Xdeployment.subsite,
+        model.StreamMetadatum.node == model.Xdeployment.node,
+        model.StreamMetadatum.sensor == model.Xdeployment.sensor,
+        model.StreamMetadatum.method.in_(['telemetered', 'streamed']),
         model.Xdeployment.sassetid == model.Xasset.assetid,
         or_(
             model.Xdeployment.eventstoptime.is_(None),
@@ -324,8 +323,6 @@ def get_current_deployment(session, subsite, node, sensor):
     :param subsite: subsite portion of reference designator (e.g. RS03AXPS)
     :param node: node portion of reference designator (e.g. SF01A)
     :param sensor: sensor portion of reference designator (e.g. 01-CTDPFA101)
-    :param lower_bound: datetime object representing the lower time bound of this query
-    :param upper_bound: datetime object representing the upper time bound of this query
     :return: sqlalchemy query object representing this query
     """
     filters = [

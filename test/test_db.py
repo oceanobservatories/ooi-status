@@ -2,15 +2,13 @@ import os
 import datetime
 import logging
 import unittest
-import numpy as np
 import pandas as pd
 from sqlalchemy.sql.elements import and_
 from sqlalchemy import create_engine
 from sqlalchemy_utils import database_exists, create_database
-
+from ooi_data.postgres import model
 
 from ooi_status.get_logger import get_logger
-from ooi_status import model
 from ooi_status.status_monitor import StatusMonitor
 
 log = get_logger(__name__, level=logging.INFO)
