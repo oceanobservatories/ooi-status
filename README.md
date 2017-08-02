@@ -7,7 +7,8 @@ This project contains code to automate the monitoring of data ingestion in the O
 To install this project for development (pip):
 
 ```commandline
-mkvirtualenv status
+mkvirtualenv status  # need to follow the instructions for installing virtualenv first
+yum install postgresql-devel
 pip install -U pip
 pip install -r requirements.txt
 ```
