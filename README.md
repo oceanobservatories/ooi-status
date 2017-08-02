@@ -22,7 +22,7 @@ conda env create -f conda_env.yml
 To install this project for test/production (pip):
 
 ```commandline
-mkvirtualenv status
+mkvirtualenv ooi_status
 pip install -U pip
 pip install -r requirements.txt
 pip install .
