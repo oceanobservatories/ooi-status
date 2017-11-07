@@ -60,7 +60,8 @@ MONITOR_URL ='postgresql+psycopg2://user@localhost/monitor'
 METADATA_URL = 'postgresql+psycopg2://user@localhost/metadata'
 ```
 
-And to run the HTTP API service (accepts same settings override as described for the backend monitor):
+And to run the HTTP API service (accepts same settings override as described for the backend monitor):  
+NOTE: this can be accomplished by executing run_gunicorn.sh from the root folder
 
 ```commandline
 PSYCOGREEN=true gunicorn -w 2 -k gevent -b 0.0.0.0:9000 ooi_status.api:app
