@@ -12,11 +12,18 @@ log = get_logger(__name__)
 NOT_EXPECTED = 'Not Expected'
 MISSING = 'Missing'
 PRESENT = 'Present'
+SPARSE1 = 'Sparse (> 100% average separation)'
+SPARSE2 = 'Sparse (> 150% average separation)'
+SPARSE3 = 'Sparse (> 200% average separation)'
 
+# TODO: need to have color for "contains gaps"
 data_categories = {
     NOT_EXPECTED: {'color': '#ffffff'},
     MISSING: {'color': '#d9534d'},
-    PRESENT: {'color': '#5cb85c'}
+    PRESENT: {'color': '#5cb85c'},
+    SPARSE1: {'color': '#7bcb7b'},
+    SPARSE2: {'color': '#90d890'},
+    SPARSE3: {'color': '#ace9ac'}
 }
 
 EVEN_DEPLOYMENT = '#0073cf'
@@ -88,12 +95,21 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
         # find gaps
         if overall_interval < threshold and df.size > 30:
             df['last_last'] = df['last'].shift(1)
+            # identify rows that have sparse data => row has embedded gap in data
+            df['interval'] = df['last'] - df['first']                       # time interval of each row
+            df['mean_sep'] = df['interval'] / df['count']                   # mean separation of data points in row
+            df['sparse'] = df['mean_sep'] > pd.to_timedelta(overall_interval,'s')                # row has sparse data
+            df['pre_gap'] = (df['first'] - df['last_last']) > pd.to_timedelta(threshold,'s')     # gap in data before row
+
+            # parallel dataframe identifying potential gaps
+            missing = (df['pre_gap'] | df['sparse'])
+
             gap = (df['first'] - df['last_last']).astype('m8[s]')
             last = df['last'].iloc[-1]
 
             # step through each deployment any gaps *inside* the deployment bounds
             # if deployment data exists, otherwise return all found gaps
-            gaps_df = df[gap > threshold]
+            gaps_df = df[missing]
             last_first = df['first'].iloc[0]
 
             # if the data falls short of the lower bound, mark a gap at the start
@@ -101,10 +117,23 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
                 available.append((lower_bound, MISSING, last_first))
 
             # create spans for all gaps
+            first_row = True
             for row in gaps_df.itertuples(index=False):
-                available.append((last_first, PRESENT, row.last_last))
-                available.append((row.last_last, MISSING, row.first))
-                last_first = row.first
+                if row.pre_gap:
+                    # report a data gap before the current row
+                    available.append((last_first, PRESENT, row.last_last))
+                    available.append((row.last_last, MISSING, row.first))
+                    last_first = row.first
+                else:
+                    # report data gap(s) within the first row
+                    if not first_row:
+                        # special handling -- no previous for first row
+                        available.append((last_first, PRESENT, row.first))
+                    # TODO: potentially determine relative sparsity?
+                    sparseness = compute_sparseness(row,overall_interval)
+                    available.append((row.first, sparseness, row.last))
+                    last_first = row.last
+                first_row = False
 
             # create an available span for the tail end
             available.append((last_first, PRESENT, last))
@@ -130,6 +159,26 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
 
     return available
 
+def compute_sparseness(row,ds_sep):
+    """
+    Computes the "sparseness" of a sparse row. There are three levels of sparseness:
+    SPARSE1: 1.0 <= row.mean_sep / ds_sep < 1.5
+    SPARSE2: 1.5 <= row.mean_sep / ds_sep < 2.0
+    SPARSE3: 2.0 <= row.mean_sep / ds_sep
+    :param row: The dataset row containing the sparse data
+    :param ds_sep: avaerage separation of data points in the dataset
+    :return: The appropriate "sparsness" level
+    """
+    # in case this method is called on a row that isn't sparse, default to having data present.
+    ret_val = PRESENT
+    sep_ratio = row.mean_sep / pd.to_timedelta(ds_sep, 's')
+    if sep_ratio >= 2.0:
+        ret_val = SPARSE3
+    elif sep_ratio >= 1.5:
+        ret_val = SPARSE2
+    elif sep_ratio >= 1.0:
+        ret_val = SPARSE1
+    return ret_val
 
 def filter_spans(spans, deploy_data):
     """
