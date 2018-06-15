@@ -16,7 +16,6 @@ SPARSE1 = 'Sparse (> 100% average separation)'
 SPARSE2 = 'Sparse (> 150% average separation)'
 SPARSE3 = 'Sparse (> 200% average separation)'
 
-# TODO: need to have color for "contains gaps"
 data_categories = {
     NOT_EXPECTED: {'color': '#ffffff'},
     MISSING: {'color': '#d9534d'},
@@ -129,7 +128,6 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
                     if not first_row:
                         # special handling -- no previous for first row
                         available.append((last_first, PRESENT, row.first))
-                    # TODO: potentially determine relative sparsity?
                     sparseness = compute_sparseness(row,overall_interval)
                     available.append((row.first, sparseness, row.last))
                     last_first = row.last
