@@ -12,9 +12,9 @@ log = get_logger(__name__)
 NOT_EXPECTED = 'Not Expected'
 MISSING = 'Missing'
 PRESENT = 'Present'
-SPARSE1 = 'Sparse (> 100% average separation)'
-SPARSE2 = 'Sparse (> 150% average separation)'
-SPARSE3 = 'Sparse (> 200% average separation)'
+SPARSE1 = 'Sparsity Level 1'
+SPARSE2 = 'Sparsity Level 2'
+SPARSE3 = 'Sparsity Level 3'
 
 data_categories = {
     NOT_EXPECTED: {'color': '#ffffff'},
