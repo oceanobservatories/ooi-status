@@ -207,3 +207,6 @@ Data Availability is reported as a Tool Tip string with a color value for ease o
 | Sparsity Level 3 | #ACE9AC | Average time between data points is greater than 200% of the average time sepatation over the entire data set     |
 | Missing          | #D9534D | There is no data available for the time interval                                                                  |
 
+### Data Availability Display Configuration
+
+Data Availability colors and sparsity bounds are configured in default_settings.py

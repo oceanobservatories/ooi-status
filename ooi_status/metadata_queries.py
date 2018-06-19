@@ -10,28 +10,28 @@ from api import app
 
 log = get_logger(__name__)
 
-NOT_EXPECTED = 'Not Expected'
-MISSING = 'Missing'
-PRESENT = 'Present'
-SPARSE1 = app.config['SPARSITY_LEVEL_1']
-SPARSE2 = app.config['SPARSITY_LEVEL_2']
-SPARSE3 = app.config['SPARSITY_LEVEL_3']
+NOT_EXPECTED = app.config['DATA_NOT_EXPECTED']
+MISSING = app.config['DATA_MISSING']
+PRESENT = app.config['DATA_PRESENT']
+SPARSE1 = app.config['DATA_SPARSE_1']
+SPARSE2 = app.config['DATA_SPARSE_2']
+SPARSE3 = app.config['DATA_SPARSE_3']
 
 data_categories = {
-    NOT_EXPECTED: {'color': '#ffffff'},
-    MISSING: {'color': '#d9534d'},
-    PRESENT: {'color': '#5cb85c'},
-    SPARSE1: {'color': '#7bcb7b'},
-    SPARSE2: {'color': '#90d890'},
-    SPARSE3: {'color': '#ace9ac'}
+    NOT_EXPECTED: {'color': app.config['COLOR_NOT_EXPECTED']},
+    MISSING: {'color': app.config['COLOR_MISSING']},
+    PRESENT: {'color': app.config['COLOR_PRESENT']},
+    SPARSE1: {'color': app.config['COLOR_SPARSE_1']},
+    SPARSE2: {'color': app.config['COLOR_SPARSE_2']},
+    SPARSE3: {'color': app.config['COLOR_SPARSE_3']}
 }
 
 SPARSITY_MIN = app.config['SPARSE_DATA_MIN']
 SPARSITY_MID = app.config['SPARSE_DATA_MID']
 SPARSITY_MAX = app.config['SPARSE_DATA_MAX']
 
-EVEN_DEPLOYMENT = '#0073cf'
-ODD_DEPLOYMENT = '#cf5c00'
+EVEN_DEPLOYMENT = app.config['COLOR_EVEN_DEPLOYMENT']
+ODD_DEPLOYMENT = app.config['COLOR_ODD_DEPLOYMENT']
 
 
 def get_data(session, subsite, node, sensor, method, stream, lower_bound, upper_bound):
