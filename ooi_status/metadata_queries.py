@@ -6,15 +6,16 @@ from sqlalchemy import func, not_, or_
 
 from .get_logger import get_logger
 
+from api import app
 
 log = get_logger(__name__)
 
 NOT_EXPECTED = 'Not Expected'
 MISSING = 'Missing'
 PRESENT = 'Present'
-SPARSE1 = 'Sparsity Level 1'
-SPARSE2 = 'Sparsity Level 2'
-SPARSE3 = 'Sparsity Level 3'
+SPARSE1 = app.config['SPARSITY_LEVEL_1']
+SPARSE2 = app.config['SPARSITY_LEVEL_2']
+SPARSE3 = app.config['SPARSITY_LEVEL_3']
 
 data_categories = {
     NOT_EXPECTED: {'color': '#ffffff'},
@@ -24,6 +25,10 @@ data_categories = {
     SPARSE2: {'color': '#90d890'},
     SPARSE3: {'color': '#ace9ac'}
 }
+
+SPARSITY_MIN = app.config['SPARSE_DATA_MIN']
+SPARSITY_MID = app.config['SPARSE_DATA_MID']
+SPARSITY_MAX = app.config['SPARSE_DATA_MAX']
 
 EVEN_DEPLOYMENT = '#0073cf'
 ODD_DEPLOYMENT = '#cf5c00'
@@ -160,9 +165,9 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
 def compute_sparseness(row,ds_sep):
     """
     Computes the "sparseness" of a sparse row. There are three levels of sparseness:
-    SPARSE1: 1.0 <= row.mean_sep / ds_sep < 1.5
-    SPARSE2: 1.5 <= row.mean_sep / ds_sep < 2.0
-    SPARSE3: 2.0 <= row.mean_sep / ds_sep
+    SPARSE1: SPARSITY_MIN <= row.mean_sep / ds_sep < SPARSITY_MID
+    SPARSE2: SPARSITY_MID <= row.mean_sep / ds_sep < SPARSITY_MAX
+    SPARSE3: SPARSITY_MAX <= row.mean_sep / ds_sep
     :param row: The dataset row containing the sparse data
     :param ds_sep: avaerage separation of data points in the dataset
     :return: The appropriate "sparsness" level
@@ -170,11 +175,11 @@ def compute_sparseness(row,ds_sep):
     # in case this method is called on a row that isn't sparse, default to having data present.
     ret_val = PRESENT
     sep_ratio = row.mean_sep / pd.to_timedelta(ds_sep, 's')
-    if sep_ratio >= 2.0:
+    if sep_ratio >= SPARSITY_MAX:
         ret_val = SPARSE3
-    elif sep_ratio >= 1.5:
+    elif sep_ratio >= SPARSITY_MID:
         ret_val = SPARSE2
-    elif sep_ratio >= 1.0:
+    elif sep_ratio >= SPARSITY_MIN:
         ret_val = SPARSE1
     return ret_val
 
