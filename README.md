@@ -105,3 +105,108 @@ file as follows:
 export OOISTATUS_SETTINGS=$(pwd)/local_config.py
 ooi_status_monitor --expected=/path/to/expected.csv
 ```
+
+## Data Availability
+
+A data availability report, in JSON format, may be obtained by querying the HTTP API service.
+The query string is
+
+```commandline
+http://<host name>:9000/available/<reference designator>
+```
+
+For example
+
+```commandline
+http://localhost:9000/available/GP05MOAS-GL523-04-CTDGVM000
+```
+
+This will return a JSON object similar to
+
+```JSON
+{
+  "availability": [
+    {
+      "categories": {
+        "Deployment: 1": {
+          "color": "#0073cf"
+        }
+      },
+      "data": [
+        [
+          "2015-06-02 04:40:00",
+          "Deployment: 1",
+          "2016-08-28 00:00:00"
+        ]
+      ],
+      "measure": "Deployments"
+    },
+    {
+      "categories": {
+        "Missing": {
+          "color": "#d9534d"
+        },
+        "Not Expected": {
+          "color": "#ffffff"
+        },
+        "Present": {
+          "color": "#5cb85c"
+        },
+        "Sparsity Level 1": {
+          "color": "#7bcb7b"
+        },
+        "Sparsity Level 2": {
+          "color": "#90d890"
+        },
+        "Sparsity Level 3": {
+          "color": "#ace9ac"
+        }
+      },
+      "data": [
+        [
+          "2015-06-02 04:40:00",
+          "Present",
+          "2015-06-07 08:52:29"
+        ],
+        [
+          "2015-06-07 08:52:29",
+          "Missing",
+          "2015-06-14 03:50:32"
+        ],
+        [
+          "2015-06-14 03:50:32",
+          "Present",
+          "2015-08-29 00:01:20"
+        ]
+      ],
+      "measure": "recovered_host ctdgv_m_glider_instrument_recovered"
+    }
+  ]
+}
+```
+
+Note: an actual query may return additional data points and additional streams.
+
+## Intpreting Data Availability
+
+Data availability is identified two different ways:
+
+1. Actual gaps in data. Data Gaps are identified by computing the time gaps between consecutive bins used  to store the data in Cassandra. A time gap greater than 0.1% of the deployment time is reported as having missing data.
+2. Relative sparsity of data in Cassandra bins. Sparse Data is identified by computing the average time separation between data points in Cassandra bin. Bins having an average time separation greater than 0.1% of the deployment time are reported as sparse.
+
+### Interpretation of Data Availability Colors
+
+Data Availability is reported as a Tool Tip string with a color value for ease of display.
+
+| Tool Tip         |  Color  | Description                                                                                                       |
+| ---------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| Not Expected     | #FFFFFF | No data is expected in the time interval                                                                          |
+| Present          | #5CB85C | Average time between data points is less than or equal to the average time separation over the entire data set    |
+| Sparsity Level 1 | #7BCB7B | Average time between data points is between 100% and 150% of the average time sepatation over the entire data set |
+| Sparsity Level 2 | #90D890 | Average time between data points is between 150% and 200% of the average time sepatation over the entire data set |
+| Sparsity Level 3 | #ACE9AC | Average time between data points is greater than 200% of the average time sepatation over the entire data set     |
+| Missing          | #D9534D | There is no data available for the time interval                                                                  |
+
+### Data Availability Display Configuration
+
+Data Availability colors and sparsity bounds are configured in default_settings.py
