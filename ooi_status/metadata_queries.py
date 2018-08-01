@@ -120,23 +120,23 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
             if last_first > lower_bound:
                 available.append((lower_bound, MISSING, last_first))
 
-            # create spans for all gaps
-            first_row = True
+            # create spans for gaps and sparse data
             for row in gaps_df.itertuples(index=False):
                 if row.pre_gap:
+                    if last_first < row.last_last:
+                        # only report current row if it is an interval
+                        available.append((last_first, PRESENT, row.last_last))
                     # report a data gap before the current row
-                    available.append((last_first, PRESENT, row.last_last))
                     available.append((row.last_last, MISSING, row.first))
                     last_first = row.first
                 else:
-                    # report data gap(s) within the first row
-                    if not first_row:
-                        # special handling -- no previous for first row
+                    if last_first < row.first:
+                        # special handling -- only report data before if valid
                         available.append((last_first, PRESENT, row.first))
-                    sparseness = compute_sparseness(row,overall_interval)
+                    # determine and report sparsity level of current row
+                    sparseness = compute_sparseness(row, overall_interval)
                     available.append((row.first, sparseness, row.last))
                     last_first = row.last
-                first_row = False
 
             # create an available span for the tail end
             available.append((last_first, PRESENT, last))
@@ -157,8 +157,9 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
                 else:
                     first = row.first
                     last = row.last
-
-                available.append((first, PRESENT, last))
+                # row has data, determine sparseness
+                sparseness = compute_sparseness(row, overall_interval)
+                available.append((first, sparseness, last))
 
     return available
 
@@ -172,9 +173,18 @@ def compute_sparseness(row,ds_sep):
     :param ds_sep: avaerage separation of data points in the dataset
     :return: The appropriate "sparsness" level
     """
+    # calculate the row's data density ratio
+    if 'mean_sep' in row:
+        sep_ratio = row.mean_sep / pd.to_timedelta(ds_sep, 's')
+    else:
+        # calculate the density from the row
+        interval = row.last - row.first
+        mean_sep = interval / row.count
+        sep_ratio = mean_sep / pd.to_timedelta(ds_sep, 's')
+
     # in case this method is called on a row that isn't sparse, default to having data present.
     ret_val = PRESENT
-    sep_ratio = row.mean_sep / pd.to_timedelta(ds_sep, 's')
+
     if sep_ratio >= SPARSITY_MAX:
         ret_val = SPARSE3
     elif sep_ratio >= SPARSITY_MID:
