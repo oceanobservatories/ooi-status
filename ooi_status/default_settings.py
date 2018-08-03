@@ -14,9 +14,9 @@ NOTIFY_URL_PORT = 12587
 DATA_NOT_EXPECTED = 'Not Expected'
 DATA_MISSING = 'Missing'
 DATA_PRESENT = 'Present'
-DATA_SPARSE_1 = 'Sparsity Level 1'
-DATA_SPARSE_2 = 'Sparsity Level 2'
-DATA_SPARSE_3 = 'Sparsity Level 3'
+DATA_SPARSE_1 = 'Sparse 1'
+DATA_SPARSE_2 = 'Sparse 2'
+DATA_SPARSE_3 = 'Sparse 3'
 
 # Define colors for display of data availability results
 COLOR_NOT_EXPECTED = '#ffffff'
