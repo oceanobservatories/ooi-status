@@ -170,7 +170,7 @@ def compute_sparseness(row,ds_sep):
     SPARSE2: SPARSITY_MID <= row.mean_sep / ds_sep < SPARSITY_MAX
     SPARSE3: SPARSITY_MAX <= row.mean_sep / ds_sep
     :param row: The dataset row containing the sparse data
-    :param ds_sep: avaerage separation of data points in the dataset
+    :param ds_sep: average separation of data points in the dataset
     :return: The appropriate "sparsness" level
     """
     # calculate the row's data density ratio
