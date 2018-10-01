@@ -1,6 +1,7 @@
 import datetime
 
 import pandas as pd
+import numpy as np
 from ooi_data.postgres import model
 from sqlalchemy import func, not_, or_
 
@@ -29,6 +30,8 @@ data_categories = {
 SPARSITY_MIN = app.config['SPARSE_DATA_MIN']
 SPARSITY_MID = app.config['SPARSE_DATA_MID']
 SPARSITY_MAX = app.config['SPARSE_DATA_MAX']
+
+MIN_SPARSITY_INTERVAL = app.config['MIN_SPARSITY_INTERVAL']
 
 EVEN_DEPLOYMENT = app.config['COLOR_EVEN_DEPLOYMENT']
 ODD_DEPLOYMENT = app.config['COLOR_ODD_DEPLOYMENT']
@@ -94,6 +97,9 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
         threshold = span / 1000.0
         if count:
             overall_interval = span / count
+        # This probably need to be made relative to sample density
+        if overall_interval < MIN_SPARSITY_INTERVAL:
+            overall_interval = MIN_SPARSITY_INTERVAL
 
         # if the sample interval is less than 1/1000 the time span
         # find gaps
@@ -104,6 +110,10 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
             df['mean_sep'] = df['interval'] / df['count']                   # mean separation of data points in row
             df['sparse'] = df['mean_sep'] > pd.to_timedelta(overall_interval,'s')                # row has sparse data
             df['pre_gap'] = (df['first'] - df['last_last']) > pd.to_timedelta(threshold,'s')     # gap in data before row
+
+            # In some cases, there are consecutive "sparse" intervals.
+            # we want to consolidate consecutive intervals into a single interval.
+            df = mergeSparseIntervals(df)
 
             # parallel dataframe identifying potential gaps
             missing = (df['pre_gap'] | df['sparse'])
@@ -129,7 +139,7 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
                     # report a data gap before the current row
                     available.append((row.last_last, MISSING, row.first))
                     last_first = row.first
-                else:
+                if row.sparse:
                     if last_first < row.first:
                         # special handling -- only report data before if valid
                         available.append((last_first, PRESENT, row.first))
@@ -162,6 +172,58 @@ def find_data_spans(session, subsite, node, sensor, method, stream, lower_bound,
                 available.append((first, sparseness, last))
 
     return available
+
+def mergeSparseIntervals(dataframe):
+    """
+    Processes a DataFrame with potential sparse intervals as well as gaps before time intervals.
+    After processing, any consecutive sparse intervals will be merged.
+    :param dataframe: the DataFrame to be processed
+    :return: the updated DataFrame
+    """
+    # positional names for adjusting the rows
+    COUNT = 2
+    LAST = 1
+    LAST_LAST = 3
+    WIDTH = 4
+    SEP = 5
+    SPARSE = 6
+
+    index = 0      # keeps track of the insert point of the merged "sparse" rows
+    # firstRow = True  # allows for spacial treatment of the first row.
+
+    # get the underlying numpy structure.
+    contents = dataframe.values
+
+    # create the copy -- this will be the same size and shape as the original but filled with nulls
+    upd_contents = np.empty_like(contents)
+
+    working = np.copy(contents[0])
+    for row in contents[1:]:
+        if not row[SPARSE]:
+            # control break -- the row isn't "sparse". We save the working
+            # row to the update array
+            upd_contents[index] = np.copy(working)
+            working = np.copy(row)
+            index += 1
+        else:
+            working[COUNT] += row[COUNT]
+            working[LAST] = row[LAST]
+            working[LAST_LAST] = row[LAST_LAST]
+            working[SEP] = working[WIDTH] / working[COUNT]
+            working[SPARSE] = True
+
+    # there is automatically a control break at the end of the data set...
+    upd_contents[index] = np.copy(working)
+
+    # Increment the index to ensure all rows are included when we truncate.
+    # TODO: do we need to check to see if the update array needs to be truncated?
+    index += 1
+
+    # create a new dataframe the contains the updated/merged data
+    upd_dataframe = pd.DataFrame(upd_contents[:index],columns = dataframe.columns)
+
+    # return the new dataframe
+    return upd_dataframe
 
 def compute_sparseness(row,ds_sep):
     """
@@ -204,7 +266,8 @@ def filter_spans(spans, deploy_data):
     index = 0
     new_spans = []
     for start, _, stop in deploy_data:
-        for span_start, span_type, span_stop, in spans:
+        for i in range(index,len(spans) - index):
+            span_start, span_type, span_stop = spans[i]
             if span_start > stop:
                 if index > 0:
                     index -= 1

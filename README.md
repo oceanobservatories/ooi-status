@@ -152,13 +152,13 @@ This will return a JSON object similar to
         "Present": {
           "color": "#5cb85c"
         },
-        "Sparsity Level 1": {
+        "Sparse 1": {
           "color": "#7bcb7b"
         },
-        "Sparsity Level 2": {
+        "Sparse 2": {
           "color": "#90d890"
         },
-        "Sparsity Level 3": {
+        "Sparse 3": {
           "color": "#ace9ac"
         }
       },
@@ -202,9 +202,9 @@ Data Availability is reported as a Tool Tip string with a color value for ease o
 | ---------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
 | Not Expected     | #FFFFFF | No data is expected in the time interval                                                                          |
 | Present          | #5CB85C | Average time between data points is less than or equal to the average time separation over the entire data set    |
-| Sparsity Level 1 | #7BCB7B | Average time between data points is between 100% and 150% of the average time sepatation over the entire data set |
-| Sparsity Level 2 | #90D890 | Average time between data points is between 150% and 200% of the average time sepatation over the entire data set |
-| Sparsity Level 3 | #ACE9AC | Average time between data points is greater than 200% of the average time sepatation over the entire data set     |
+| Sparse 1         | #7BCB7B | Average time between data points is between 100% and 150% of the average time sepatation over the entire data set |
+| Sparse 2         | #90D890 | Average time between data points is between 150% and 200% of the average time sepatation over the entire data set |
+| Sparse 3         | #ACE9AC | Average time between data points is greater than 200% of the average time sepatation over the entire data set     |
 | Missing          | #D9534D | There is no data available for the time interval                                                                  |
 
 ### Data Availability Display Configuration

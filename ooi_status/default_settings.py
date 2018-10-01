@@ -26,6 +26,9 @@ COLOR_SPARSE_1 = '#7bcb7b'
 COLOR_SPARSE_2 = '#90d890'
 COLOR_SPARSE_3 = '#ace9ac'
 
+# minimum separation (in seconds) required for sparse data
+MIN_SPARSITY_INTERVAL = 10
+
 # interval endpoints for determining sparsity of data
 SPARSE_DATA_MIN = 1.0
 SPARSE_DATA_MID = 1.5
