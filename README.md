@@ -187,11 +187,11 @@ This will return a JSON object similar to
 
 Note: an actual query may return additional data points and additional streams.
 
-## Intpreting Data Availability
+## Interpreting Data Availability
 
 Data availability is identified two different ways:
 
-1. Actual gaps in data. Data Gaps are identified by computing the time gaps between consecutive bins used  to store the data in Cassandra. A time gap greater than 0.1% of the deployment time is reported as having missing data.
+1. Actual gaps in data. Data Gaps are identified by computing the time gaps between consecutive bins used to store the data in Cassandra. A time gap greater than 0.1% of the deployment time is reported as having missing data.
 2. Relative sparsity of data in Cassandra bins. Sparse Data is identified by computing the average time separation between data points in Cassandra bin. Bins having an average time separation greater than 0.1% of the deployment time are reported as sparse.
 
 ### Interpretation of Data Availability Colors
@@ -200,12 +200,12 @@ Data Availability is reported as a Tool Tip string with a color value for ease o
 
 | Tool Tip         |  Color  | Description                                                                                                       |
 | ---------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
-| Not Expected     | #FFFFFF | No data is expected in the time interval                                                                          |
-| Present          | #5CB85C | Average time between data points is less than or equal to the average time separation over the entire data set    |
+| Not Expected     | #FFFFFF | No data are expected in the time interval |
+| Present          | #5CB85C | Average time between data points is less than or equal to the average time separation over the entire data set |
 | Sparsity Level 1 | #7BCB7B | Average time between data points is between 100% and 150% of the average time sepatation over the entire data set |
 | Sparsity Level 2 | #90D890 | Average time between data points is between 150% and 200% of the average time sepatation over the entire data set |
-| Sparsity Level 3 | #ACE9AC | Average time between data points is greater than 200% of the average time sepatation over the entire data set     |
-| Missing          | #D9534D | There is no data available for the time interval                                                                  |
+| Sparsity Level 3 | #ACE9AC | Average time between data points is greater than 200% of the average time sepatation over the entire data set |
+| Missing          | #D9534D | There are no data available for the time interval |
 
 ### Data Availability Display Configuration
 
