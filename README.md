@@ -69,6 +69,36 @@ PSYCOGREEN=true gunicorn -w 2 -k gevent -b 0.0.0.0:9000 ooi_status.api:app
 
 See the gunicorn documentation for more information on the various options available for gunicorn.
 
+## Stopping/starting ooi-status using Conda
+
+The following command is used to determine if ooi-status is running:
+
+```commandline
+ps -fewH | grep "9000 ooi_status" | grep -v grep
+```
+
+If ooi-status is running you will see results similar to the following (the 1st process is the parent):
+
+```commandline
+asadev    91877  91876  0  2018 ?        00:10:48     /home/asadev/miniconda2/envs/ooi_status/bin/python /home/asadev/miniconda2/envs/ooi_status/bin/gunicorn --log-config logging.conf -w 2 -k gevent -b 0.0.0.0:9000 ooi_status.api:app
+asadev    89288  91877  0 Jun19 ?        00:04:37       /home/asadev/miniconda2/envs/ooi_status/bin/python /home/asadev/miniconda2/envs/ooi_status/bin/gunicorn --log-config logging.conf -w 2 -k gevent -b 0.0.0.0:9000 ooi_status.api:app
+asadev    89289  91877  0 Jun19 ?        00:04:33       /home/asadev/miniconda2/envs/ooi_status/bin/python /home/asadev/miniconda2/envs/ooi_status/bin/gunicorn --log-config logging.conf -w 2 -k gevent -b 0.0.0.0:9000 ooi_status.api:app
+```
+
+To kill all the processes, kill the parent and the children will die along with it. A shortcut to killing all of them:
+
+```commandline
+for i in $(ps -eo ppid,pid,cmd | grep 9000 | grep -v grep | awk '{print $1, $2}'); do echo $i; done | sort | uniq -c | awk '$1 == 3 {print "kill",$NF}' | bash
+```
+
+To start ooi-status run the following commands:
+
+```commandline
+conda activate ooi_status
+run_gunicorn.sh > /dev/null 2>&1 & (NOTE: if . is not on PATH, then prepend "./" to script)
+conda deactivate
+```
+
 ## DDL Generation
 
 This project uses alembic to track DDL changes between revisions. These DDL changes can be applied directly
