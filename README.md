@@ -99,7 +99,7 @@ run_gunicorn.sh > /dev/null 2>&1 & (NOTE: if . is not on PATH, then prepend "./"
 conda deactivate
 ```
 
-Confirm ooi-status is started properly by running the command listed earlier and verify it shows 3 new processes:
+Confirm ooi-status is started properly by running the command listed at the start of this section and verify it shows 3 new processes similar to the ones listed right after that command.
 
 ## DDL Generation
 
